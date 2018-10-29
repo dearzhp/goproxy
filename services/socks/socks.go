@@ -12,17 +12,17 @@ import (
 	"strings"
 	"time"
 
-	server "github.com/snail007/goproxy/core/cs/server"
-	"github.com/snail007/goproxy/core/lib/kcpcfg"
-	"github.com/snail007/goproxy/services"
-	"github.com/snail007/goproxy/utils"
-	"github.com/snail007/goproxy/utils/conncrypt"
-	"github.com/snail007/goproxy/utils/datasize"
-	"github.com/snail007/goproxy/utils/dnsx"
-	"github.com/snail007/goproxy/utils/iolimiter"
-	"github.com/snail007/goproxy/utils/lb"
-	"github.com/snail007/goproxy/utils/mapx"
-	"github.com/snail007/goproxy/utils/socks"
+	server "github.com/dearzhp/goproxy/core/cs/server"
+	"github.com/dearzhp/goproxy/core/lib/kcpcfg"
+	"github.com/dearzhp/goproxy/services"
+	"github.com/dearzhp/goproxy/utils"
+	"github.com/dearzhp/goproxy/utils/conncrypt"
+	"github.com/dearzhp/goproxy/utils/datasize"
+	"github.com/dearzhp/goproxy/utils/dnsx"
+	"github.com/dearzhp/goproxy/utils/iolimiter"
+	"github.com/dearzhp/goproxy/utils/lb"
+	"github.com/dearzhp/goproxy/utils/mapx"
+	"github.com/dearzhp/goproxy/utils/socks"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -384,7 +384,6 @@ func (s *Socks) proxyTCP(inConn *net.Conn, serverConn *socks.ServerConn) {
 		} else {
 			if len(*s.cfg.Parent) > 0 {
 				host, _, _ := net.SplitHostPort(serverConn.Target())
-				useProxy := false
 				if utils.IsInternalIP(host, *s.cfg.Always) {
 					useProxy = false
 				} else {

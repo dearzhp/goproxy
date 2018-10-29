@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/snail007/goproxy/utils/mapx"
+	"github.com/dearzhp/goproxy/utils/mapx"
 	dns "github.com/miekg/dns"
 )
 

@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	srvtransport "github.com/snail007/goproxy/core/cs/server"
-	"github.com/snail007/goproxy/core/lib/kcpcfg"
-	"github.com/snail007/goproxy/services"
-	"github.com/snail007/goproxy/utils"
-	"github.com/snail007/goproxy/utils/mapx"
+	srvtransport "github.com/dearzhp/goproxy/core/cs/server"
+	"github.com/dearzhp/goproxy/core/lib/kcpcfg"
+	"github.com/dearzhp/goproxy/services"
+	"github.com/dearzhp/goproxy/utils"
+	"github.com/dearzhp/goproxy/utils/mapx"
 	//"github.com/xtaci/smux"
 	smux "github.com/hashicorp/yamux"
 )

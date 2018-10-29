@@ -70,7 +70,7 @@ RUN apk update; apk upgrade; \
     mkdir github.com; \
     mkdir github.com/snail007; \
     cd github.com/snail007; \
-    git clone https://github.com/snail007/goproxy.git; \
+    git clone https://github.com/dearzhp/goproxy.git; \
 	cd goproxy; \
     git checkout ${GOPROXY_VERSION}; \
     CGO_ENABLED=0 GOOS=linux go build -ldflags "-s -w" -a -installsuffix cgo -o proxy; \
@@ -78,5 +78,5 @@ RUN apk update; apk upgrade; \
     
 FROM 1.10.3-stretch 
 RUN mkdir /proxy && chmod 0777 /proxy
-COPY --from=builder builder /go/src/github.com/snail007/goproxy/proxy /proxy/
+COPY --from=builder builder /go/src/github.com/dearzhp/goproxy/proxy /proxy/
 CMD cd /proxy  && /proxy ${OPTS}

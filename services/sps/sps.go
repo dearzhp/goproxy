@@ -15,19 +15,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/snail007/goproxy/core/cs/server"
-	"github.com/snail007/goproxy/core/lib/kcpcfg"
-	"github.com/snail007/goproxy/services"
-	"github.com/snail007/goproxy/utils"
-	"github.com/snail007/goproxy/utils/conncrypt"
-	"github.com/snail007/goproxy/utils/datasize"
-	"github.com/snail007/goproxy/utils/dnsx"
-	"github.com/snail007/goproxy/utils/iolimiter"
-	"github.com/snail007/goproxy/utils/lb"
-	"github.com/snail007/goproxy/utils/mapx"
-	"github.com/snail007/goproxy/utils/sni"
-	"github.com/snail007/goproxy/utils/socks"
-	"github.com/snail007/goproxy/utils/ss"
+	"github.com/dearzhp/goproxy/core/cs/server"
+	"github.com/dearzhp/goproxy/core/lib/kcpcfg"
+	"github.com/dearzhp/goproxy/services"
+	"github.com/dearzhp/goproxy/utils"
+	"github.com/dearzhp/goproxy/utils/conncrypt"
+	"github.com/dearzhp/goproxy/utils/datasize"
+	"github.com/dearzhp/goproxy/utils/dnsx"
+	"github.com/dearzhp/goproxy/utils/iolimiter"
+	"github.com/dearzhp/goproxy/utils/lb"
+	"github.com/dearzhp/goproxy/utils/mapx"
+	"github.com/dearzhp/goproxy/utils/sni"
+	"github.com/dearzhp/goproxy/utils/socks"
+	"github.com/dearzhp/goproxy/utils/ss"
 )
 
 type SPSArgs struct {
@@ -237,7 +237,7 @@ func (s *SPS) Start(args interface{}, log *logger.Logger) (err error) {
 				err = sc.ListenTCP(s.callback)
 			} else if *s.cfg.LocalType == "tls" {
 				err = sc.ListenTLS(s.cfg.CertBytes, s.cfg.KeyBytes, s.cfg.CaCertBytes, s.callback)
-			} else if *s.cfg.LocalType == "tcp" {
+			} else if *s.cfg.LocalType == "kcp" {
 				err = sc.ListenKCP(s.cfg.KCP, s.callback, s.log)
 			}
 			if *s.cfg.ParentServiceType == "socks" {

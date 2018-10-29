@@ -1,7 +1,7 @@
 #/bin/bash
 VERSION=$(cat ../../VERSION)
 VER="${VERSION}_$(date '+%Y%m%d%H%M%S')"
-X="-X github.com/snail007/goproxy/sdk/android-ios.SDK_VERSION=$VER -X main.APP_VERSION=$VER"
+X="-X github.com/dearzhp/goproxy/sdk/android-ios.SDK_VERSION=$VER -X main.APP_VERSION=$VER"
 
 rm -rf sdk-android-*.tar.gz
 rm -rf android

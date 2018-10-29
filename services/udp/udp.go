@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/snail007/goproxy/core/cs/server"
-	"github.com/snail007/goproxy/services"
-	"github.com/snail007/goproxy/utils"
-	"github.com/snail007/goproxy/utils/mapx"
+	"github.com/dearzhp/goproxy/core/cs/server"
+	"github.com/dearzhp/goproxy/services"
+	"github.com/dearzhp/goproxy/utils"
+	"github.com/dearzhp/goproxy/utils/mapx"
 )
 
 type UDPArgs struct {

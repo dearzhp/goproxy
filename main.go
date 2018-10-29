@@ -8,7 +8,7 @@ import (
 	"runtime/debug"
 	"syscall"
 
-	"github.com/snail007/goproxy/services"
+	"github.com/dearzhp/goproxy/services"
 )
 
 var APP_VERSION = "No Version Provided"

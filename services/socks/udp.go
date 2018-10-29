@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/snail007/goproxy/utils"
-	goaes "github.com/snail007/goproxy/utils/aes"
-	"github.com/snail007/goproxy/utils/socks"
+	"github.com/dearzhp/goproxy/utils"
+	goaes "github.com/dearzhp/goproxy/utils/aes"
+	"github.com/dearzhp/goproxy/utils/socks"
 )
 
 func (s *Socks) ParentUDPKey() (key []byte) {

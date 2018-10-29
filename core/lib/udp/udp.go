@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	bufx "github.com/snail007/goproxy/core/lib/buf"
-	mapx "github.com/snail007/goproxy/core/lib/mapx"
+	bufx "github.com/dearzhp/goproxy/core/lib/buf"
+	mapx "github.com/dearzhp/goproxy/core/lib/mapx"
 )
 
 type CreateOutUDPConnFn func(listener *net.UDPConn, srcAddr *net.UDPAddr, packet []byte) (outconn *net.UDPConn, err error)
@@ -62,7 +62,7 @@ func (s *IOBinder) AliveWithServeConn(srcAddr string, inTCPConn *net.Conn) *IOBi
 	go func() {
 		defer func() {
 			if e := recover(); e != nil {
-				fmt.Printf("crashed, err: %s\nstack:\n%s",e, string(debug.Stack()))
+				fmt.Printf("crashed, err: %s\nstack:\n%s", e, string(debug.Stack()))
 			}
 		}()
 		buf := make([]byte, 1)
@@ -75,7 +75,7 @@ func (s *IOBinder) AliveWithServeConn(srcAddr string, inTCPConn *net.Conn) *IOBi
 	go func() {
 		defer func() {
 			if e := recover(); e != nil {
-				fmt.Printf("crashed, err: %s\nstack:\n%s",e, string(debug.Stack()))
+				fmt.Printf("crashed, err: %s\nstack:\n%s", e, string(debug.Stack()))
 			}
 		}()
 		for {
@@ -96,7 +96,7 @@ func (s *IOBinder) AliveWithClientConn(srcAddr string, outTCPConn *net.Conn) *IO
 	go func() {
 		defer func() {
 			if e := recover(); e != nil {
-				fmt.Printf("crashed, err: %s\nstack:\n%s",e, string(debug.Stack()))
+				fmt.Printf("crashed, err: %s\nstack:\n%s", e, string(debug.Stack()))
 			}
 		}()
 		buf := make([]byte, 1)
@@ -156,7 +156,7 @@ func (s *IOBinder) Run() (err error) {
 			go func() {
 				defer func() {
 					if e := recover(); e != nil {
-						fmt.Printf("crashed, err: %s\nstack:\n%s",e, string(debug.Stack()))
+						fmt.Printf("crashed, err: %s\nstack:\n%s", e, string(debug.Stack()))
 					}
 				}()
 				defer func() {

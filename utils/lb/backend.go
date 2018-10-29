@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/snail007/goproxy/utils/dnsx"
+	"github.com/dearzhp/goproxy/utils/dnsx"
 )
 
 // BackendConfig it's the configuration loaded
@@ -116,7 +116,7 @@ func (b *Backend) startMuxHeartCheck() {
 	go func() {
 		defer func() {
 			if e := recover(); e != nil {
-				fmt.Printf("crashed, err: %s\nstack:\n%s",e, string(debug.Stack()))
+				fmt.Printf("crashed, err: %s\nstack:\n%s", e, string(debug.Stack()))
 			}
 		}()
 		for {
@@ -151,7 +151,7 @@ func (b *Backend) startTCPHeartCheck() {
 	go func() {
 		defer func() {
 			if e := recover(); e != nil {
-				fmt.Printf("crashed, err: %s\nstack:\n%s",e, string(debug.Stack()))
+				fmt.Printf("crashed, err: %s\nstack:\n%s", e, string(debug.Stack()))
 			}
 		}()
 		for {
