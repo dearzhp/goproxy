@@ -53,6 +53,10 @@ type SPSArgs struct {
 	AuthURLTimeout        *int
 	AuthURLRetry          *int
 	LocalIPS              *[]string
+	Always                *bool
+	Interval              *int
+	Blocked               *string
+	Direct                *string
 	ParentAuth            *string
 	LocalKey              *string
 	ParentKey             *string
@@ -77,6 +81,7 @@ type SPSArgs struct {
 }
 type SPS struct {
 	cfg                   SPSArgs
+	checker               utils.Checker
 	domainResolver        dnsx.DomainResolver
 	basicAuth             utils.BasicAuth
 	serverChannels        []*server.ServerChannel
@@ -88,15 +93,18 @@ type SPS struct {
 	lb                    *lb.Group
 	udpLocalKey           []byte
 	udpParentKey          []byte
+	isStop                bool
 }
 
 func NewSPS() services.Service {
 	return &SPS{
 		cfg:                   SPSArgs{},
+		checker:               utils.Checker{},
 		basicAuth:             utils.BasicAuth{},
 		serverChannels:        []*server.ServerChannel{},
 		userConns:             mapx.NewConcurrentMap(),
 		udpRelatedPacketConns: mapx.NewConcurrentMap(),
+		isStop:                false,
 	}
 }
 func (s *SPS) CheckArgs() (err error) {
@@ -150,6 +158,7 @@ func (s *SPS) InitService() (err error) {
 	}
 
 	if len(*s.cfg.Parent) > 0 {
+		s.checker = utils.NewChecker(*s.cfg.Timeout, int64(*s.cfg.Interval), *s.cfg.Blocked, *s.cfg.Direct, s.log)
 		s.InitLB()
 	}
 
@@ -179,8 +188,10 @@ func (s *SPS) StopService() {
 		} else {
 			s.log.Printf("service sps stoped")
 		}
+		s.isStop = true
 		s.basicAuth = utils.BasicAuth{}
 		s.cfg = SPSArgs{}
+		s.checker = utils.Checker{}
 		s.domainResolver = dnsx.DomainResolver{}
 		s.lb = nil
 		s.localCipher = nil
@@ -214,6 +225,9 @@ func (s *SPS) StopService() {
 	}
 	for _, c := range s.udpRelatedPacketConns.Items() {
 		(*c.(*net.UDPConn)).Close()
+	}
+	if len(*s.cfg.Parent) > 0 {
+		s.checker.Stop()
 	}
 }
 func (s *SPS) Start(args interface{}, log *logger.Logger) (err error) {
@@ -312,6 +326,7 @@ func (s *SPS) OutToTCP(inConn *net.Conn) (lbAddr string, err error) {
 	isSNI, _ := sni.ServerNameFromBytes(h)
 	*inConn = bInConn
 	address := ""
+	url := ""
 	var auth = socks.Auth{}
 	var forwardBytes []byte
 	//fmt.Printf("%v", header)
@@ -363,6 +378,7 @@ func (s *SPS) OutToTCP(inConn *net.Conn) (lbAddr string, err error) {
 			forwardBytes = request.HeadBuf
 		}
 		address = request.Host
+		url = request.URL
 		var userpass string
 		if s.IsBasicAuth() {
 			userpass, err = request.GetAuthDataStr()
@@ -402,108 +418,149 @@ func (s *SPS) OutToTCP(inConn *net.Conn) (lbAddr string, err error) {
 		return
 	}
 	//connect to parent
-	var outConn net.Conn
-	selectAddr := (*inConn).RemoteAddr().String()
-	if utils.LBMethod(*s.cfg.LoadBalanceMethod) == lb.SELECT_HASH && *s.cfg.LoadBalanceHashTarget {
-		selectAddr = address
+	host, _, _ := net.SplitHostPort(address)
+	useProxy := false
+	if !utils.IsInternalIP(host, *s.cfg.Always) {
+		useProxy = true
+		if len(*s.cfg.Parent) == 0 {
+			useProxy = false
+		} else if *s.cfg.Always {
+			useProxy = true
+		} else {
+			var isInMap bool
+			useProxy, isInMap, _, _ = s.checker.IsBlocked(address, url)
+			if !isInMap {
+				s.checker.Add(address, s.Resolve(address))
+			}
+		}
 	}
-	lbAddr = s.lb.Select(selectAddr, *s.cfg.LoadBalanceOnlyHA)
-	outConn, err = s.GetParentConn(lbAddr)
+
+	var outConn net.Conn
+	tryCount := 0
+	maxTryCount := 5
+	for {
+		if s.isStop {
+			return
+		}
+		if useProxy {
+			selectAddr := (*inConn).RemoteAddr().String()
+			if utils.LBMethod(*s.cfg.LoadBalanceMethod) == lb.SELECT_HASH && *s.cfg.LoadBalanceHashTarget {
+				selectAddr = address
+			}
+			lbAddr = s.lb.Select(selectAddr, *s.cfg.LoadBalanceOnlyHA)
+			outConn, err = s.GetParentConn(lbAddr)
+			if err != nil {
+				s.log.Printf("connect to %s , err:%s", lbAddr, err)
+				utils.CloseConn(inConn)
+				return
+			}
+		} else {
+			outConn, err = s.GetDirectConn(s.Resolve(address), (*inConn).LocalAddr().String())
+		}
+		tryCount++
+		if err == nil || tryCount > maxTryCount {
+			break
+		} else {
+			s.log.Printf("connect to %s , err:%s,retrying...", lbAddr, err)
+			time.Sleep(time.Second * 2)
+		}
+	}
 	if err != nil {
 		s.log.Printf("connect to %s , err:%s", lbAddr, err)
 		utils.CloseConn(inConn)
 		return
 	}
 
-	if *s.cfg.ParentAuth != "" || *s.cfg.ParentSSKey != "" || s.IsBasicAuth() {
+	if !useProxy || *s.cfg.ParentAuth != "" || *s.cfg.ParentSSKey != "" || s.IsBasicAuth() {
 		forwardBytes = utils.RemoveProxyHeaders(forwardBytes)
 	}
 
-	//ask parent for connect to target address
-	if *s.cfg.ParentServiceType == "http" {
-		//http parent
-		isHTTPS := false
+	if useProxy {
+		if *s.cfg.ParentServiceType == "http" {
+			//http parent
+			isHTTPS := false
 
-		pb := new(bytes.Buffer)
-		if len(forwardBytes) == 0 {
-			isHTTPS = true
-			pb.Write([]byte(fmt.Sprintf("CONNECT %s HTTP/1.1\r\n", address)))
-		}
-		pb.WriteString(fmt.Sprintf("Host: %s\r\n", address))
-		pb.WriteString(fmt.Sprintf("Proxy-Host: %s\r\n", address))
-		pb.WriteString("Proxy-Connection: Keep-Alive\r\n")
-		pb.WriteString("Connection: Keep-Alive\r\n")
-
-		u := ""
-		if *s.cfg.ParentAuth != "" {
-			a := strings.Split(*s.cfg.ParentAuth, ":")
-			if len(a) != 2 {
-				err = fmt.Errorf("parent auth data format error")
-				return
+			pb := new(bytes.Buffer)
+			if len(forwardBytes) == 0 {
+				isHTTPS = true
+				pb.Write([]byte(fmt.Sprintf("CONNECT %s HTTP/1.1\r\n", address)))
 			}
-			u = fmt.Sprintf("%s:%s", a[0], a[1])
-		} else {
-			if !s.IsBasicAuth() && auth.Password != "" && auth.User != "" {
-				u = fmt.Sprintf("%s:%s", auth.User, auth.Password)
+			pb.WriteString(fmt.Sprintf("Host: %s\r\n", address))
+			pb.WriteString(fmt.Sprintf("Proxy-Host: %s\r\n", address))
+			pb.WriteString("Proxy-Connection: Keep-Alive\r\n")
+			pb.WriteString("Connection: Keep-Alive\r\n")
+
+			u := ""
+			if *s.cfg.ParentAuth != "" {
+				a := strings.Split(*s.cfg.ParentAuth, ":")
+				if len(a) != 2 {
+					err = fmt.Errorf("parent auth data format error")
+					return
+				}
+				u = fmt.Sprintf("%s:%s", a[0], a[1])
+			} else {
+				if !s.IsBasicAuth() && auth.Password != "" && auth.User != "" {
+					u = fmt.Sprintf("%s:%s", auth.User, auth.Password)
+				}
 			}
-		}
-		if u != "" {
-			pb.Write([]byte(fmt.Sprintf("Proxy-Authorization: Basic %s\r\n", base64.StdEncoding.EncodeToString([]byte(u)))))
-		}
+			if u != "" {
+				pb.Write([]byte(fmt.Sprintf("Proxy-Authorization: Basic %s\r\n", base64.StdEncoding.EncodeToString([]byte(u)))))
+			}
 
-		if isHTTPS {
-			pb.Write([]byte("\r\n"))
-		} else {
-			forwardBytes = utils.InsertProxyHeaders(forwardBytes, string(pb.Bytes()))
-			pb.Reset()
-			pb.Write(forwardBytes)
-			forwardBytes = nil
-		}
+			if isHTTPS {
+				pb.Write([]byte("\r\n"))
+			} else {
+				forwardBytes = utils.InsertProxyHeaders(forwardBytes, string(pb.Bytes()))
+				pb.Reset()
+				pb.Write(forwardBytes)
+				forwardBytes = nil
+			}
 
-		outConn.SetDeadline(time.Now().Add(time.Millisecond * time.Duration(*s.cfg.Timeout)))
-		_, err = outConn.Write(pb.Bytes())
-		outConn.SetDeadline(time.Time{})
-		if err != nil {
-			s.log.Printf("write CONNECT to %s , err:%s", lbAddr, err)
-			utils.CloseConn(inConn)
-			utils.CloseConn(&outConn)
-			return
-		}
-
-		if isHTTPS {
-			reply := make([]byte, 1024)
 			outConn.SetDeadline(time.Now().Add(time.Millisecond * time.Duration(*s.cfg.Timeout)))
-			_, err = outConn.Read(reply)
+			_, err = outConn.Write(pb.Bytes())
 			outConn.SetDeadline(time.Time{})
 			if err != nil {
-				s.log.Printf("read reply from %s , err:%s", lbAddr, err)
+				s.log.Printf("write CONNECT to %s , err:%s", lbAddr, err)
 				utils.CloseConn(inConn)
 				utils.CloseConn(&outConn)
 				return
 			}
-			//s.log.Printf("reply: %s", string(reply[:n]))
-		}
-	} else if *s.cfg.ParentServiceType == "socks" {
-		s.log.Printf("connect %s", address)
 
-		//socks client
-		_, err = s.HandshakeSocksParent(&outConn, "tcp", address, auth, false)
-		if err != nil {
-			s.log.Printf("handshake fail, %s", err)
-			return
-		}
+			if isHTTPS {
+				reply := make([]byte, 1024)
+				outConn.SetDeadline(time.Now().Add(time.Millisecond * time.Duration(*s.cfg.Timeout)))
+				_, err = outConn.Read(reply)
+				outConn.SetDeadline(time.Time{})
+				if err != nil {
+					s.log.Printf("read reply from %s , err:%s", lbAddr, err)
+					utils.CloseConn(inConn)
+					utils.CloseConn(&outConn)
+					return
+				}
+				//s.log.Printf("reply: %s", string(reply[:n]))
+			}
+		} else if *s.cfg.ParentServiceType == "socks" {
+			s.log.Printf("connect %s", address)
 
-	} else if *s.cfg.ParentServiceType == "ss" {
-		ra, e := ss.RawAddr(address)
-		if e != nil {
-			err = fmt.Errorf("build ss raw addr fail, err: %s", e)
-			return
-		}
+			//socks client
+			_, err = s.HandshakeSocksParent(&outConn, "tcp", address, auth, false)
+			if err != nil {
+				s.log.Printf("handshake fail, %s", err)
+				return
+			}
 
-		outConn, err = ss.DialWithRawAddr(&outConn, ra, "", s.parentCipher.Copy())
-		if err != nil {
-			err = fmt.Errorf("dial ss parent fail, err : %s", err)
-			return
+		} else if *s.cfg.ParentServiceType == "ss" {
+			ra, e := ss.RawAddr(address)
+			if e != nil {
+				err = fmt.Errorf("build ss raw addr fail, err: %s", e)
+				return
+			}
+
+			outConn, err = ss.DialWithRawAddr(&outConn, ra, "", s.parentCipher.Copy())
+			if err != nil {
+				err = fmt.Errorf("dial ss parent fail, err : %s", err)
+				return
+			}
 		}
 	}
 
@@ -703,5 +760,19 @@ func (s *SPS) LocalUDPKey() (key []byte) {
 		v := fmt.Sprintf("%x", md5.Sum([]byte(*s.cfg.KCP.Key)))
 		return []byte(v)[:24]
 	}
+	return
+}
+
+func (s *SPS) GetDirectConn(address string, localAddr string) (conn net.Conn, err error) {
+	ip, _, _ := net.SplitHostPort(localAddr)
+	if utils.IsInternalIP(ip, false) {
+		return utils.ConnectHost(address, *s.cfg.Timeout)
+	}
+	local, _ := net.ResolveTCPAddr("tcp", ip+":0")
+	d := net.Dialer{
+		Timeout:   time.Millisecond * time.Duration(*s.cfg.Timeout),
+		LocalAddr: local,
+	}
+	conn, err = d.Dial("tcp", address)
 	return
 }

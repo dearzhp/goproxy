@@ -333,7 +333,7 @@ func (s *HTTP) callback(inConn net.Conn) {
 			useProxy = true
 		} else {
 			var isInMap bool
-			useProxy, isInMap, _, _ = s.checker.IsBlocked(address)
+			useProxy, isInMap, _, _ = s.checker.IsBlocked(address, req.URL)
 			if !isInMap {
 				s.checker.Add(address, s.Resolve(address))
 			}

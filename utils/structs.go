@@ -11,8 +11,6 @@ import (
 	logger "log"
 	"net"
 	"net/url"
-	"os"
-	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -23,7 +21,6 @@ import (
 	"github.com/dearzhp/goproxy/utils/sni"
 
 	"github.com/golang/snappy"
-	lua "github.com/yuin/gopher-lua"
 )
 
 type Checker struct {
@@ -34,7 +31,7 @@ type Checker struct {
 	timeout    int
 	isStop     bool
 	log        *logger.Logger
-	L          *lua.LState
+	luaPool    *lStatePool
 }
 type CheckerItem struct {
 	Domain       string
@@ -55,14 +52,13 @@ func NewChecker(timeout int, interval int64, blockedFile, directFile string, log
 		isStop:   false,
 		log:      log,
 	}
-	if ch.isLua(blockedFile) {
-		luaDir := blockedFile
-		luaPath := filepath.Join(luaDir, "?.lua")
-		luaPath1 := filepath.Join(luaDir, "?/init.lua")
-		os.Setenv("LUA_PATH", luaPath+";"+luaPath1)
-		ch.L = lua.NewState()
-		if err := ch.L.DoFile(filepath.Join(luaDir, "entry.lua")); err != nil {
+	if isLua, entry := isLua(blockedFile); isLua {
+		ch.luaPool = LuaPool(blockedFile, entry)
+		L, err := ch.luaPool.New()
+		if err != nil {
 			log.Printf("entry.lua load failed : %s", err.Error())
+		} else {
+			ch.luaPool.Put(L)
 		}
 	} else {
 		ch.blockedMap = ch.loadMap(blockedFile)
@@ -79,16 +75,6 @@ func NewChecker(timeout int, interval int64, blockedFile, directFile string, log
 	}
 
 	return ch
-}
-
-func (c *Checker) isLua(f string) bool {
-	if !PathExists(f) {
-		return false
-	}
-	if info, err := os.Stat(f); err == nil && info.IsDir() {
-		return true
-	}
-	return false
 }
 
 func (c *Checker) loadMap(f string) (dataMap mapx.ConcurrentMap) {
@@ -110,7 +96,9 @@ func (c *Checker) loadMap(f string) (dataMap mapx.ConcurrentMap) {
 }
 func (c *Checker) Stop() {
 	c.isStop = true
-	c.L.Close()
+	if c.luaPool != nil {
+		c.luaPool.Shutdown()
+	}
 }
 func (c *Checker) start() {
 	go func() {
@@ -172,25 +160,18 @@ func (c *Checker) isNeedCheck(item CheckerItem) bool {
 	return true
 }
 
-func (c *Checker) luaUseProxy(domain string) bool {
-	if err := c.L.CallByParam(lua.P{
-		Fn:      c.L.GetGlobal("checkproxy"),
-		NRet:    1,
-		Protect: true,
-	}, lua.LString(domain)); err != nil {
-		return false
-	}
-	defer c.L.Pop(1)
-	return c.L.ToBool(-1)
-}
-
-func (c *Checker) IsBlocked(domain string) (blocked, isInMap bool, failN, successN uint) {
+func (c *Checker) IsBlocked(domain, url string) (blocked, isInMap bool, failN, successN uint) {
 	h, _, _ := net.SplitHostPort(domain)
 	if h != "" {
 		domain = h
 	}
-	if c.L != nil {
-		return c.luaUseProxy(domain), true, 0, 0
+	if c.luaPool != nil {
+		L := c.luaPool.Get()
+		defer c.luaPool.Put(L)
+		if url != "" {
+			domain = url
+		}
+		return luaUseProxy(L, domain), true, 0, 0
 	}
 	if c.domainIsInMap(domain, true) {
 		//log.Printf("%s in blocked ? true", address)

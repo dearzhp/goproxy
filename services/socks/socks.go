@@ -388,7 +388,7 @@ func (s *Socks) proxyTCP(inConn *net.Conn, serverConn *socks.ServerConn) {
 					useProxy = false
 				} else {
 					var isInMap bool
-					useProxy, isInMap, _, _ = s.checker.IsBlocked(serverConn.Target())
+					useProxy, isInMap, _, _ = s.checker.IsBlocked(serverConn.Target(), "")
 					if !isInMap {
 						s.checker.Add(serverConn.Target(), s.Resolve(serverConn.Target()))
 					}
