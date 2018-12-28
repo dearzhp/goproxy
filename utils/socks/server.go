@@ -121,7 +121,7 @@ func (s *ServerConn) Handshake() (err error) {
 		return
 	}
 	//log.Printf("%v,s.auth == %v && methodReq.Select(Method_NO_AUTH) %v", methodReq.methods, s.auth, methodReq.Select(Method_NO_AUTH))
-	if s.auth == nil && methodReq.Select(Method_NO_AUTH) && !methodReq.Select(Method_USER_PASS) {
+	if s.auth == nil && methodReq.Select(Method_NO_AUTH) {
 		// if !methodReq.Select(Method_NO_AUTH) {
 		// 	(*s.conn).SetReadDeadline(time.Now().Add(time.Second * s.timeout))
 		// 	methodReq.Reply(Method_NONE_ACCEPTABLE)
