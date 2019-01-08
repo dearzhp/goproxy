@@ -5,62 +5,42 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
 
-	"github.com/BixData/gluabit32"
-	"github.com/cjoudrey/gluahttp"
-	"github.com/cjoudrey/gluaurl"
-	"github.com/tengattack/gluacrypto"
 	"github.com/yuin/gopher-lua"
 )
 
 type lStatePool struct {
-	m     sync.Mutex
-	saved []*lua.LState
+	saved chan *lua.LState
 	dir   string
 	entry string
 }
 
 func (pl *lStatePool) Get() *lua.LState {
-	pl.m.Lock()
-	defer pl.m.Unlock()
-	n := len(pl.saved)
-	if n == 0 {
-		L, _ := pl.New()
-		return L
-	}
-	x := pl.saved[n-1]
-	pl.saved = pl.saved[0 : n-1]
-	return x
+	return <-pl.saved
 }
 
 func (pl *lStatePool) New() (*lua.LState, error) {
-	L, err := loadLua(pl.dir, pl.entry)
-	if err != nil {
-		L.Close()
-		return nil, err
-	}
-	return L, nil
+	return loadLua(pl.dir, pl.entry)
 }
 
 func (pl *lStatePool) Put(L *lua.LState) {
-	pl.m.Lock()
-	defer pl.m.Unlock()
-	pl.saved = append(pl.saved, L)
+	pl.saved <- L
 }
 
 func (pl *lStatePool) Shutdown() {
-	for _, L := range pl.saved {
-		L.Close()
-	}
+	L := <-pl.saved
+	L.Close()
+	close(pl.saved)
 }
 
 func LuaPool(luaDir, entry string) *lStatePool {
 	luaPool := &lStatePool{
-		saved: make([]*lua.LState, 0, 4),
+		saved: make(chan *lua.LState, 1),
 		dir:   luaDir,
 		entry: entry,
 	}
+	L, _ := luaPool.New()
+	luaPool.saved <- L
 	return luaPool
 }
 
@@ -88,15 +68,12 @@ func loadLua(luaDir, entry string) (*lua.LState, error) {
 	luaPath += filepath.Join(luaDir, "?/init.luc;")
 	os.Setenv("LUA_PATH", luaPath)
 	L := lua.NewState()
-	L.PreloadModule("http", gluahttp.NewHttpModule(&http.Client{}).Loader)
-	L.PreloadModule("url", gluaurl.Loader)
-	gluabit32.Preload(L)
-	gluacrypto.Preload(L)
+	//L.PreloadModule("http", gluahttp.NewHttpModule(&http.Client{}).Loader)
+	//L.PreloadModule("url", gluaurl.Loader)
+	//gluabit32.Preload(L)
+	//gluacrypto.Preload(L)
 	L.PreloadModule("ext", Loader)
-	if err := L.DoFile(entry); err != nil {
-		return nil, err
-	}
-	return L, nil
+	return L, L.DoFile(entry)
 }
 
 func luaUseProxy(L *lua.LState, domain string) bool {

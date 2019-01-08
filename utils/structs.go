@@ -54,12 +54,6 @@ func NewChecker(timeout int, interval int64, blockedFile, directFile string, log
 	}
 	if isLua, entry := isLua(blockedFile); isLua {
 		ch.luaPool = LuaPool(blockedFile, entry)
-		L, err := ch.luaPool.New()
-		if err != nil {
-			log.Printf("entry.lua load failed : %s", err.Error())
-		} else {
-			ch.luaPool.Put(L)
-		}
 	} else {
 		ch.blockedMap = ch.loadMap(blockedFile)
 		ch.directMap = ch.loadMap(directFile)
@@ -161,17 +155,17 @@ func (c *Checker) isNeedCheck(item CheckerItem) bool {
 }
 
 func (c *Checker) IsBlocked(domain, url string) (blocked, isInMap bool, failN, successN uint) {
-	h, _, _ := net.SplitHostPort(domain)
-	if h != "" {
-		domain = h
-	}
 	if c.luaPool != nil {
 		L := c.luaPool.Get()
 		defer c.luaPool.Put(L)
 		if url != "" {
-			domain = url
+			return luaUseProxy(L, url), true, 0, 0
 		}
 		return luaUseProxy(L, domain), true, 0, 0
+	}
+	h, _, _ := net.SplitHostPort(domain)
+	if h != "" {
+		domain = h
 	}
 	if c.domainIsInMap(domain, true) {
 		//log.Printf("%s in blocked ? true", address)
