@@ -445,6 +445,9 @@ func (s *Socks) proxyTCP(inConn *net.Conn, serverConn *socks.ServerConn) {
 
 	utils.IoBind(*inConn, outConn, func(err interface{}) {
 		s.log.Printf("conn %s - %s released", inAddr, serverConn.Target())
+		if err != nil {
+			s.log.Printf("%s", err.(error).Error())
+		}
 		s.userConns.Remove(inAddr)
 		if len(*s.cfg.Parent) > 0 {
 			s.lb.DecreaseConns(lbAddr)
