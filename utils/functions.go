@@ -74,9 +74,9 @@ func ioBind(dst io.ReadWriteCloser, src io.ReadWriteCloser, fn func(err interfac
 		var err interface{}
 		select {
 		case err = <-e1:
-			//log.Printf("e1")
+			log.Printf("e1")
 		case err = <-e2:
-			//log.Printf("e2")
+			log.Printf("e2")
 		}
 		func() {
 			defer func() {
