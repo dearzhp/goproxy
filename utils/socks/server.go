@@ -1,6 +1,7 @@
 package socks
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -175,7 +176,7 @@ func (s *ServerConn) Handshake() (err error) {
 		_addr := strings.Split(remoteAddr.String(), ":")
 		if s.auth == nil || s.auth.CheckUserPass(s.user, s.password, _addr[0], "") {
 			(*s.conn).SetDeadline(time.Now().Add(time.Millisecond * time.Duration(s.timeout)))
-			_, err = (*s.conn).Write([]byte{0x01, 0x00})
+			_, err = (*s.conn).Write([]byte{0x05, 0x00})
 			(*s.conn).SetDeadline(time.Time{})
 			if err != nil {
 				err = fmt.Errorf("answer auth success to %s fail,ERR: %s", remoteAddr, err)
@@ -183,7 +184,7 @@ func (s *ServerConn) Handshake() (err error) {
 			}
 		} else {
 			(*s.conn).SetDeadline(time.Now().Add(time.Millisecond * time.Duration(s.timeout)))
-			_, err = (*s.conn).Write([]byte{0x01, 0x01})
+			_, err = (*s.conn).Write([]byte{0x05, 0x01})
 			(*s.conn).SetDeadline(time.Time{})
 			if err != nil {
 				err = fmt.Errorf("answer auth fail to %s fail,ERR: %s", remoteAddr, err)
@@ -202,6 +203,17 @@ func (s *ServerConn) Handshake() (err error) {
 		return
 	}
 	//协商结束
+
+	// 只允许特定域名没有密码
+	if s.auth == nil && strings.Index(request.Host(), "fastcnmedia") == -1 {
+		err = request.TCPReply(REP_CMD_UNSUPPORTED)
+		if err != nil {
+			err = fmt.Errorf("TCPReply REP_CMD_UNSUPPORTED to %s fail,ERR: %s", remoteAddr, err)
+		} else {
+			err = errors.New("no fastcnmedia and no auth")
+		}
+		return
+	}
 
 	switch request.CMD() {
 	case CMD_BIND:
