@@ -205,7 +205,7 @@ func (s *ServerConn) Handshake() (err error) {
 	//协商结束
 
 	// 只允许特定域名没有密码
-	if s.user == "0" && strings.Index(request.Host(), "fastcnmedia") == -1 {
+	if s.user == "-" && strings.Index(request.Host(), "fastcnmedia") == -1 {
 		err = request.TCPReply(REP_CMD_UNSUPPORTED)
 		if err != nil {
 			err = fmt.Errorf("TCPReply REP_CMD_UNSUPPORTED to %s fail,ERR: %s", remoteAddr, err)
